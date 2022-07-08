@@ -27,20 +27,20 @@ G0 = ms.generate_unif_PDforeground(O, np.array([1.2, 1.2, 0.32]), np.array([120,
 #G0 = ms.generate_unif_PDforeground(O, np.array([1.2, 1.2, 0.32]), np.array([12, 12, 3]), 0)
 G0 = sf.translate(G0, padding_x, padding_x, padding_z)
 
-# Charge - Material 1 - TNT charge
+# # Charge - Material 1 - TNT charge
 G1 = ms.generate_FGCone_cylindrical2(O, 0.103/2.0, 0.0085, 0.001, 0.075, [40, 200, 50], 1, 2, 1)
 G1 = sf.translate(G1, 1.2, 1.2, 0.32+padding_z+h/4.0)
 
-# Material 2 : CompB (mix of RDX and TNT)
+# # Material 2 : CompB (mix of RDX and TNT)
 G2 = ms.generate_FGCone_cylindrical2(O, 0.113/2.0, 0.009325, 0.001, 0.08228, [44, 220, 55], 1, 2, 2)
 G2 = ms.Conic_Mask2(G2, O, 0.075, 0.103/2.0, 0.0085, 2, 0)
 G2 = sf.translate(G2, 1.2, 1.2, 0.32+padding_z+h/4.0)
-
+#
 G1 = sf.fg_superpose(G1, G2)
-#The Peridynamic solid has to be assembled last (input convention)
+# #The Peridynamic solid has to be assembled last (input convention)
 G1 = sf.fg_superpose(G1, G0)
-# Save geometry for visualization, and background as .dat files.
+# # Save geometry for visualization, and background as .dat files.
 
-ms.save_geometry(G1, S, 800)
+ms.save_geometry(G0, S, 800)
 ms.save_PDGeometry(G0, 1, 'Block', "mmNS")
 ms.vis_background()

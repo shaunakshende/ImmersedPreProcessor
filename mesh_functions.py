@@ -644,7 +644,7 @@ def Conic_Mask2(G, center, height, r_base, r_top, axis = 2, keep = 1):
     G.mat = G.mat[bools]
     return(G)
 
-def generate_FGCone_cylindrical2(origin, r1, r2, r_min, height, xyz_numpts_vec, material, filled, axis = 2, min_pts = 16):
+def generate_FGCone_cylindrical2(origin, r1, r2, r_min, height, xyz_numpts_vec, material, filled, axis = 2, min_pts = 4, angle = 2.0*np.pi):
         # xyz numpts vec is [layers, particles per ring, num_divZ]
     h=np.zeros(xyz_numpts_vec[2])
     dh=np.double(height-origin[2])/(np.double(xyz_numpts_vec[2])-1)
@@ -654,18 +654,18 @@ def generate_FGCone_cylindrical2(origin, r1, r2, r_min, height, xyz_numpts_vec, 
         if i==0: h[i]=origin[2]
         hr=h[i]+dh/2.0
         hl=h[i]-dh/2.0
-        if hr>height: hr=height 
+        if hr>height: hr=height
         if hl<0: hl=origin[2]
         r_crit = r1-h[i]*(r1-r2)/height;
         if(i ==0):
-            G = GetConeLayer2(origin, h[i], hr, hl, r_crit, r_min, xyz_numpts_vec, material, filled, min_pts)
+            G = GetConeLayer2(origin, h[i], hr, hl, r_crit, r_min, xyz_numpts_vec, material, filled, min_pts, angle)
         elif(i>0):
-            G1 = GetConeLayer2(origin, h[i], hr, hl, r_crit, r_min, xyz_numpts_vec, material, filled, min_pts)
+            G1 = GetConeLayer2(origin, h[i], hr, hl, r_crit, r_min, xyz_numpts_vec, material, filled, min_pts, angle)
             G = sf.fg_superpose(G, G1)
     print "Complete"
     return(G)
 
-def GetConeLayer2(origin, h, hr, hl, r_crit, r_min, xyz_numpts_vec, material, filled, min_pts):
+def GetConeLayer2(origin, h, hr, hl, r_crit, r_min, xyz_numpts_vec, material, filled, min_pts, angle):
     layers = xyz_numpts_vec[0]
     r = np.zeros(xyz_numpts_vec[0])
     dr = (r_crit-r_min)/(layers-1)
@@ -678,20 +678,23 @@ def GetConeLayer2(origin, h, hr, hl, r_crit, r_min, xyz_numpts_vec, material, fi
         if rr>r_crit: rr=r_crit
         if rl<origin[0]: rl=r_min*(filled%1)
         if(j == 0):
-            G = getSegmentedCircle(rl, rr, r[j], r_crit, h, hr, hl, xyz_numpts_vec, material, min_pts)
+            G = getSegmentedCircle(rl, rr, r[j], r_crit, h, hr, hl, xyz_numpts_vec, material, min_pts, angle = angle)
         elif(j>0):
-            G1 = getSegmentedCircle(rl, rr, r[j], r_crit, h, hr, hl, xyz_numpts_vec, material, min_pts)
+            G1 = getSegmentedCircle(rl, rr, r[j], r_crit, h, hr, hl, xyz_numpts_vec, material, min_pts, angle = angle)
             G = sf.fg_superpose(G, G1)
     return(G)
 
-def getSegmentedCircle(rl, rr, r, r_crit, h, hr, hl, xyz_numpts_vec, material, min_pts = 16):
-    arc = 2.0*np.pi/xyz_numpts_vec[1]
+def getSegmentedCircle(rl, rr, r, r_crit, h, hr, hl, xyz_numpts_vec, material, min_pts = 4, angle = 2.0*np.pi):
+    # Foregrounds which expand a lot with this radial geometry shouldnt have particles on set angles, it is
+    # better to stagger the layers of the cone.
+    arc = angle/(xyz_numpts_vec[1])
     arcL = arc*r_crit
-    node_num = int(2*np.pi*r/arcL)
+    node_num = int(angle*r/arcL)
 
-    if(arcL>2*np.pi*r):
+    if(node_num < min_pts):
         node_num = min_pts
-    arc = 2.0*np.pi/node_num
+
+    arc = angle/(node_num-1.0)
     dtheta = arc
 
     dr_vec=np.zeros(node_num)
@@ -704,7 +707,6 @@ def getSegmentedCircle(rl, rr, r, r_crit, h, hr, hl, xyz_numpts_vec, material, m
     thetal_vec=np.zeros(node_num)
     hr_vec=np.zeros(node_num)
     hl_vec=np.zeros(node_num)
-
     mat_vec=np.zeros(node_num)
 
     coor = np.zeros((int(node_num),4))
@@ -715,9 +717,14 @@ def getSegmentedCircle(rl, rr, r, r_crit, h, hr, hl, xyz_numpts_vec, material, m
         if i>0:  theta[i] = theta[i-1] + dtheta
         thetar=theta[i] + dtheta/2.0
         thetal=theta[i] - dtheta/2.0
+        if i==0: thetal = theta[i]
+        if(thetar > angle):
+            theta[i] = angle
+            thetar = theta[i]
+
         [x, y] = pol2cart(r, theta[i])
         coor[node,:]=[node+1, x, y ,h]
-        vol[node] = (hr-hl)*(rr**2-rl**2)*arc/2.0
+        vol[node] = (hr-hl)*(rr**2-rl**2)*(thetar-thetal)/2.0
         rr_vec[node]=rr
         rl_vec[node]=rl
         thetar_vec[node]=thetar

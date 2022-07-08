@@ -29,7 +29,6 @@ class foreground():
         self.hl = hl
         self.mat= mat # Material flag
 
-
 def lin_stretch(axis, lin_center, poly_order, foreground_obj):
     #given axis (0,1,2), origin and polynomial order for stretching (>1 for center and <1 for edge) and foreground instance, stretches foreground mesh in 1-direction toward or away from lin_center (scalar)
 
@@ -185,11 +184,68 @@ def cent_stretch_bg(C1, C2, t, num_div_vec, xyz, poly_order, n=1):
     #np.savetxt('ElementInfo.dat', lines, fmt='%15.10f %15.10f %15.10f')
     return(S)
 
+def linear_stretch_bg_one_sided(S, X, poly_order, d, C1, C2, t,  side=-1, n=1):
+    #Stretched background generation function, given line1 line2 thickness numknots vector xyz origin of stretch and polynomial order as np.array. Returns NURBS object stretched mesh.
+
+    O=C1.points[0,:]
+    S_out=ruled(C1, C2)
+    S_out.elevate(1,n)
+    S_out.elevate(0,n)
+    if t>0:
+        S_out=extrude(S_out, t, 2)
+        S_out.elevate(2,n)
+
+    if(d==0):
+        x = S.knots[0][2:-2];
+        yhat = S.knots[1][3:-3]
+        zhat = S.knots[2][3:-3]
+        xtilde=x-(X-O[d])/(C1.points[1,d]-O[d])
+    if(d==1):
+        x = S.knots[1][2:-2];
+        xhat = S.knots[0][3:-3];
+        zhat = S.knots[2][3:-3];
+        xtilde=x-(X-O[d])/(C2.points[1,d]-O[d])
+    if(d==2):
+        x = S.knots[2][2:-2];
+        xhat = S.knots[0][3:-3];
+        yhat = S.knots[1][3:-3];
+        xtilde=x-(X-O[d])/(t)
+
+
+
+    x_p_t=xtilde[xtilde>0]/np.amax(xtilde)
+    x_n_t=xtilde[xtilde<0]/np.amin(xtilde)
+    x_p_t=(np.sign(x_p_t)*np.absolute(x_p_t)**poly_order)*np.amax(xtilde)
+    x_n_t=(np.sign(x_n_t)*np.absolute(x_n_t)**poly_order)*np.amin(xtilde)
+
+    if(side==1):
+        xtilde[xtilde>0]=x_p_t
+    if(side==-1):
+        xtilde[xtilde<0]=x_n_t
+
+
+    if(d==0):
+        xhat_out=xtilde+(X-O[d])/(C1.points[1,d]-O[d])
+        S_out.refine(1, yhat); S_out.refine(2, zhat);
+    if(d==1):
+        xhat_out=xtilde+(X-O[d])/(C2.points[1,d]-O[d])
+        S_out.refine(0, xhat); S_out.refine(2, zhat);
+    if(d==2):
+        xhat_out=xtilde+(X-O[d])/(t)
+        S_out.refine(0, xhat); S_out.refine(1, yhat);
+
+    S_out.refine(d, xhat_out[1:-1])
+    lines = np.hstack([np.transpose(S_out.knots[0][2:-2]), np.transpose(S_out.knots[1][2:-2]), np.transpose(S_out.knots[2][2:-2])])
+    np.savetxt('ElementInfo.dat', lines, fmt='%15.10f')
+
+    #When we make stretched grids, information about the knots is required to properly compute Lagrangian point ranks. This can be obtained
+    #through petiga (IGA->U) or by reading the elementinfo file.
+    return(S_out)
 
 def uniform_refine_1D(region_start, region_end, num_div, refinement_factor):
     x=np.linspace(0,1,num_div)
     X=np.array([0]);
-    h=1/(float(num_div)-1)
+    h=1.0/(float(num_div)-1)
     h_refined=h/float(refinement_factor)
     for i in range(num_div):
         X = np.vstack([X, x[i]])
@@ -197,8 +253,6 @@ def uniform_refine_1D(region_start, region_end, num_div, refinement_factor):
             for j in range(refinement_factor-1):
                 X = np.vstack([X, x[i]+h_refined*(j+1)])
     return(X)
-
-
 
 def background_with_uniform_refinement(C1, C2, t, num_div_vec, xyz, region_x, region_y, region_z, refinement_factor, n=1):
     #Stretched background generation function, given line1 line2 thickness numknots vector xyz origin of stretch region = box defined by center and sidelength nparray([x0, y0, z0, length])
@@ -216,10 +270,8 @@ def background_with_uniform_refinement(C1, C2, t, num_div_vec, xyz, region_x, re
     if(num_div_vec[2]>1):
      zhat = uniform_refine_1D(region_z[0], region_z[1], num_div_vec[2], refinement_factor)
      S.refine(2,zhat[2:-1])
-     lines = np.vstack([xhat, yhat, zhat])
-     #lines = np.hstack((np.array([xhat.shape[0], yhat.shape[0], zhat.shape[0]]), lines))
-     #print(lines)
-     print(np.array([xhat.shape[0], yhat.shape[0], zhat.shape[0]]))
+     lines = np.vstack([xhat[1:], yhat[1:], zhat[1:]])
+     print(np.array([xhat.shape[0]-1, yhat.shape[0]-1, zhat.shape[0]-1]))
      np.savetxt('ElementInfo.dat', lines, fmt='%15.10f')
 
     S.refine(0,xhat[2:-1])
@@ -230,8 +282,6 @@ def background_with_uniform_refinement(C1, C2, t, num_div_vec, xyz, region_x, re
     # lines = np.vstack((np.array([xhat.shape[0], yhat.shape[0]]), lines))
     # print(lines)
     # np.savetxt('ElementInfo.dat', lines, fmt='%15.10f %15.10f')
-
-
     return(S)
 
 def translate(G,x,y,z):
@@ -377,7 +427,6 @@ def merge_bg(S1, S2, axis):
     out.remap(axis,0,1)
     out.clamp(axis)
     return(out)
-
 
 def fg_superpose(G1,G2):
     #Superimposes two separate foreground domains for computation. Stacks and re-indexes only
